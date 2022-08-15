@@ -54,6 +54,8 @@
     #define VAR_ISR_ATTR
 #endif
 
+const uint64_t ONE64 = 1;
+
 
 /* Format for protocol definitions:
  * {pulselength, Sync bit, "0" bit, "1" bit, invertedSignal}
@@ -90,7 +92,9 @@ static const RCSwitch::Protocol PROGMEM proto[] = {
   { 200, { 130, 7 }, {  16, 7 }, { 16,  3 }, true},      // protocol 9 Conrad RS-200 TX
   { 365, { 18,  1 }, {  3,  1 }, {  1,  3 }, true },     // protocol 10 (1ByOne Doorbell)
   { 270, { 36,  1 }, {  1,  2 }, {  2,  1 }, true },     // protocol 11 (HT12E)
-  { 320, { 36,  1 }, {  1,  2 }, {  2,  1 }, true }      // protocol 12 (SM5212)
+  { 320, { 36,  1 }, {  1,  2 }, {  2,  1 }, true },     // protocol 12 (SM5212)
+  {  50, { 96, 30 }, {  7, 15 }, { 14,  8 }, false},     // protocol 13 (Dooya Control DC1600)
+                                                         // own addition 0: 350-750, 1:700-400, sync: 4800-1500
 };
 
 enum {
@@ -98,7 +102,7 @@ enum {
 };
 
 #if not defined( RCSwitchDisableReceiving )
-volatile unsigned long RCSwitch::nReceivedValue = 0;
+volatile uint64_t RCSwitch::nReceivedValue = 0;
 volatile unsigned int RCSwitch::nReceivedBitlength = 0;
 volatile unsigned int RCSwitch::nReceivedDelay = 0;
 volatile unsigned int RCSwitch::nReceivedProtocol = 0;
@@ -479,12 +483,12 @@ void RCSwitch::sendTriState(const char* sCodeWord) {
  */
 void RCSwitch::send(const char* sCodeWord) {
   // turn the tristate code word into the corresponding bit pattern, then send it
-  unsigned long code = 0;
+  uint64_t code = 0;
   unsigned int length = 0;
   for (const char* p = sCodeWord; *p; p++) {
-    code <<= 1L;
+    code <<= ONE64;
     if (*p != '0')
-      code |= 1L;
+      code |= ONE64;
     length++;
   }
   this->send(code, length);
@@ -495,7 +499,7 @@ void RCSwitch::send(const char* sCodeWord) {
  * bits are sent from MSB to LSB, i.e., first the bit at position length-1,
  * then the bit at position length-2, and so on, till finally the bit at position 0.
  */
-void RCSwitch::send(unsigned long code, unsigned int length) {
+void RCSwitch::send(uint64_t code, unsigned int length) {
   if (this->nTransmitterPin == -1)
     return;
 
@@ -509,7 +513,7 @@ void RCSwitch::send(unsigned long code, unsigned int length) {
 
   for (int nRepeat = 0; nRepeat < nRepeatTransmit; nRepeat++) {
     for (int i = length-1; i >= 0; i--) {
-      if (code & (1L << i))
+      if (code & (ONE64 << i))
         this->transmit(protocol.one);
       else
         this->transmit(protocol.zero);
@@ -581,7 +585,7 @@ void RCSwitch::resetAvailable() {
   RCSwitch::nReceivedValue = 0;
 }
 
-unsigned long RCSwitch::getReceivedValue() {
+uint64_t RCSwitch::getReceivedValue() {
   return RCSwitch::nReceivedValue;
 }
 
@@ -617,7 +621,7 @@ bool RECEIVE_ATTR RCSwitch::receiveProtocol(const int p, unsigned int changeCoun
     memcpy_P(&pro, &proto[p-1], sizeof(Protocol));
 #endif
 
-    unsigned long code = 0;
+    uint64_t code = 0;
     //Assuming the longer pulse length is the pulse captured in timings[0]
     const unsigned int syncLengthInPulses =  ((pro.syncFactor.low) > (pro.syncFactor.high)) ? (pro.syncFactor.low) : (pro.syncFactor.high);
     const unsigned int delay = RCSwitch::timings[0] / syncLengthInPulses;
@@ -653,6 +657,8 @@ bool RECEIVE_ATTR RCSwitch::receiveProtocol(const int p, unsigned int changeCoun
             code |= 1;
         } else {
             // Failed
+            //Serial.print("failed protocol" );
+            //Serial.println( p );
             return false;
         }
     }
