@@ -511,15 +511,21 @@ void RCSwitch::send(uint64_t code, unsigned int length) {
   }
 #endif
 
+  HighLow sync1 = {14, 178}; // up to 180??
+  HighLow sync2 = {96, 30};
   for (int nRepeat = 0; nRepeat < nRepeatTransmit; nRepeat++) {
+    this->transmit(sync1);
+    this->transmit(sync2);
     for (int i = length-1; i >= 0; i--) {
       if (code & (ONE64 << i))
         this->transmit(protocol.one);
       else
         this->transmit(protocol.zero);
     }
-    this->transmit(protocol.syncFactor);
+    //this->transmit(protocol.syncFactor);
   }
+  this->transmit(sync1);
+  this->transmit(sync2);
 
   // Disable transmit after sending (i.e., for inverted protocols)
   digitalWrite(this->nTransmitterPin, LOW);
